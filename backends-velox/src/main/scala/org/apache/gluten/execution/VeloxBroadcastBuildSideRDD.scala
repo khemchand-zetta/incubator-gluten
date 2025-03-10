@@ -14,11 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.gluten.execution
 
 import org.apache.gluten.iterator.Iterators
-
-import org.apache.spark.{broadcast, SparkContext}
+import org.apache.spark.{broadcast, SparkContext, TaskContext}
 import org.apache.spark.sql.execution.joins.BuildSideRelation
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
@@ -28,9 +28,20 @@ case class VeloxBroadcastBuildSideRDD(
   extends BroadcastBuildSideRDD(sc, broadcasted) {
 
   override def genBroadcastBuildSideIterator(): Iterator[ColumnarBatch] = {
-    val relation = broadcasted.value.asReadOnlyCopy()
+    // Get the relation from the broadcast variable
+    val relation = broadcasted.value
+
+    // Get or build the hash table from the cache
+    val hashTable = VeloxBroadcastBuildSideCache.getOrBuildHashTable(relation)
+
+    // Register cleanup task for the hash table when task completes
+    TaskContext.get().addTaskCompletionListener(_ => {
+      hashTable.decrementReferenceCount()
+    })
+
+    // Return an iterator over the hash table
     Iterators
-      .wrap(relation.deserialized)
+      .wrap(hashTable.iterator)
       .recyclePayload(batch => batch.close())
       .create()
   }

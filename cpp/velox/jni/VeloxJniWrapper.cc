@@ -38,6 +38,10 @@
 
 #include <iostream>
 
+
+#include "VeloxBroadcastHashTable.h"
+#include "JniUtil.h"
+
 using namespace gluten;
 using namespace facebook;
 
@@ -462,6 +466,78 @@ JNIEXPORT jlong JNICALL Java_org_apache_gluten_columnarbatch_VeloxColumnarBatchJ
 
   JNI_METHOD_END(kInvalidObjectHandle)
 }
+
+
+
+// Create a new broadcast hash table
+JNIEXPORT jlong JNICALL
+Java_org_apache_gluten_execution_VeloxJniWrapper_createBroadcastHashTable(
+    JNIEnv* env, jclass, jlong tableId) {
+  try {
+    auto table = std::make_shared<VeloxBroadcastHashTable>(tableId);
+    BroadcastHashTableRegistry::instance().registerTable(table);
+    return reinterpret_cast<jlong>(table.get());
+  } catch (const std::exception& e) {
+    throwJavaException(env, e.what());
+    return 0;
+  }
+}
+
+// Add a batch to the hash table
+JNIEXPORT void JNICALL
+Java_org_apache_gluten_execution_VeloxJniWrapper_addBatchToBroadcastHashTable(
+    JNIEnv* env, jclass, jlong nativePtr, jobject jBatch) {
+  try {
+    auto table = BroadcastHashTableRegistry::instance().getTable(nativePtr);
+    if (!table) {
+      throwJavaException(env, "Invalid broadcast hash table pointer");
+      return;
+    }
+
+    // Convert Java ColumnarBatch to VeloxColumnarBatch
+    VeloxColumnarBatch batch = convertJavaColumnarBatchToVelox(env, jBatch);
+
+    // Add the batch to the hash table
+    table->addBatch(batch);
+  } catch (const std::exception& e) {
+    throwJavaException(env, e.what());
+  }
+}
+
+// Get an iterator over the hash table
+JNIEXPORT jobject JNICALL
+Java_org_apache_gluten_execution_VeloxJniWrapper_getBroadcastHashTableIterator(
+    JNIEnv* env, jclass, jlong nativePtr) {
+  try {
+    auto table = BroadcastHashTableRegistry::instance().getTable(nativePtr);
+    if (!table) {
+      throwJavaException(env, "Invalid broadcast hash table pointer");
+      return nullptr;
+    }
+
+    // Create a C++ iterator
+    auto iterator = table->createIterator();
+
+    // Convert to Java Iterator<ColumnarBatch>
+    return createJavaIteratorFromNative(env, std::move(iterator));
+  } catch (const std::exception& e) {
+    throwJavaException(env, e.what());
+    return nullptr;
+  }
+}
+
+// Release the hash table
+JNIEXPORT void JNICALL
+Java_org_apache_gluten_execution_VeloxJniWrapper_releaseBroadcastHashTable(
+    JNIEnv* env, jclass, jlong nativePtr) {
+  try {
+    BroadcastHashTableRegistry::instance().removeTable(nativePtr);
+  } catch (const std::exception& e) {
+    throwJavaException(env, e.what());
+  }
+}
+
+
 
 #ifdef __cplusplus
 }

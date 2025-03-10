@@ -1693,4 +1693,9 @@ object GlutenConfig {
       .checkValue(_ > 0, s"must be positive.")
       .createWithDefault(10)
 
+
+  val COLUMNAR_BROADCAST_JOIN_HASH_TABLE_SHARING = buildConf("spark.gluten.sql.columnar.velox.broadcastJoin.hashTableSharing").doc("Enable sharing of broadcast join hash tables between tasks in the same executor").booleanConf.createWithDefault(true)
+  val COLUMNAR_BROADCAST_JOIN_HASH_TABLE_EXPIRE_TIME = buildConf("spark.gluten.sql.columnar.velox.broadcast.expire.seconds").doc("Time in seconds after which a cached broadcast hash table will expire").intConf.createWithDefault(3600)
+
+
 }

@@ -135,6 +135,7 @@ set(VELOX_SRCS
     jni/JniFileSystem.cc
     jni/JniUdf.cc
     jni/VeloxJniWrapper.cc
+    jni/VeloxBroadcastHashTable.cc
     memory/BufferOutputStream.cc
     memory/VeloxColumnarBatch.cc
     memory/VeloxMemoryManager.cc
