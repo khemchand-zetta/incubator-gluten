@@ -463,6 +463,144 @@ JNIEXPORT jlong JNICALL Java_org_apache_gluten_columnarbatch_VeloxColumnarBatchJ
   JNI_METHOD_END(kInvalidObjectHandle)
 }
 
+
+/*
+ * Create a new broadcast hash table.
+ */
+JNIEXPORT jlong JNICALL
+Java_org_apache_gluten_jni_VeloxJniWrapper_createBroadcastHashTable(
+    JNIEnv* env, jclass, jlong tableId) {
+  try {
+    auto table = std::make_shared<gluten::VeloxBroadcastHashTable>(tableId);
+    return gluten::BroadcastHashTableRegistry::instance().registerTable(table);
+  } catch (const std::exception& e) {
+    throwJavaException(env, e.what());
+    return 0;
+  }
+}
+
+/*
+ * Add a batch to the hash table.
+ */
+JNIEXPORT void JNICALL
+Java_org_apache_gluten_jni_VeloxJniWrapper_addBatchToBroadcastHashTable(
+    JNIEnv* env, jclass, jlong nativePtr, jobject jBatch) {
+  try {
+    auto table = gluten::BroadcastHashTableRegistry::instance().getTable(nativePtr);
+    if (!table) {
+      throwJavaException(env, "Invalid broadcast hash table pointer");
+      return;
+    }
+
+    // Convert Java ColumnarBatch to VeloxColumnarBatch
+    auto batch = fromJavaColumnarBatch(env, jBatch);
+
+    // Add the batch to the hash table
+    table->addBatch(*batch);
+  } catch (const std::exception& e) {
+    throwJavaException(env, e.what());
+  }
+}
+
+/*
+ * Get an iterator over the hash table.
+ */
+JNIEXPORT jobject JNICALL
+Java_org_apache_gluten_jni_VeloxJniWrapper_getBroadcastHashTableIterator(
+    JNIEnv* env, jclass, jlong nativePtr) {
+  try {
+    auto table = gluten::BroadcastHashTableRegistry::instance().getTable(nativePtr);
+    if (!table) {
+      throwJavaException(env, "Invalid broadcast hash table pointer");
+      return nullptr;
+    }
+
+    // Create a C++ iterator
+    auto iterator = table->createIterator();
+
+    // Convert to Java Iterator<ColumnarBatch>
+    // This requires implementing a method to bridge C++ iterator to Java iterator
+    return createJavaIteratorFromNative(env, std::move(iterator));
+  } catch (const std::exception& e) {
+    throwJavaException(env, e.what());
+    return nullptr;
+  }
+}
+
+/*
+ * Release the hash table.
+ */
+JNIEXPORT void JNICALL
+Java_org_apache_gluten_jni_VeloxJniWrapper_releaseBroadcastHashTable(
+    JNIEnv* env, jclass, jlong nativePtr) {
+  try {
+    gluten::BroadcastHashTableRegistry::instance().removeTable(nativePtr);
+  } catch (const std::exception& e) {
+    throwJavaException(env, e.what());
+  }
+}
+
+/*
+ * Check if the native iterator has more elements.
+ */
+JNIEXPORT jboolean JNICALL
+Java_org_apache_gluten_jni_NativeIteratorBridge_nativeHasNext(
+    JNIEnv* env, jobject, jlong nativeIteratorId) {
+  try {
+    auto holder = getNativeIterator(nativeIteratorId);
+    if (!holder) {
+      throwJavaException(env, "Invalid native iterator");
+      return JNI_FALSE;
+    }
+    return holder->iterator()->hasNext() ? JNI_TRUE : JNI_FALSE;
+  } catch (const std::exception& e) {
+    throwJavaException(env, e.what());
+    return JNI_FALSE;
+  }
+}
+
+/*
+ * Get the next element from the native iterator.
+ */
+JNIEXPORT jobject JNICALL
+Java_org_apache_gluten_jni_NativeIteratorBridge_nativeNext(
+    JNIEnv* env, jobject, jlong nativeIteratorId) {
+  try {
+    auto holder = getNativeIterator(nativeIteratorId);
+    if (!holder) {
+      throwJavaException(env, "Invalid native iterator");
+      return nullptr;
+    }
+
+    if (!holder->iterator()->hasNext()) {
+      throwJavaException(env, "No more elements in the iterator");
+      return nullptr;
+    }
+
+    // Get the next vector and convert to Java ColumnarBatch
+    auto vector = holder->iterator()->next();
+    return toJavaColumnarBatch(env, vector);
+  } catch (const std::exception& e) {
+    throwJavaException(env, e.what());
+    return nullptr;
+  }
+}
+
+/*
+ * Close the native iterator.
+ */
+JNIEXPORT void JNICALL
+Java_org_apache_gluten_jni_NativeIteratorBridge_nativeClose(
+    JNIEnv* env, jobject, jlong nativeIteratorId) {
+  try {
+    removeNativeIterator(nativeIteratorId);
+  } catch (const std::exception& e) {
+    throwJavaException(env, e.what());
+  }
+}
+
+
+
 #ifdef __cplusplus
 }
 #endif
